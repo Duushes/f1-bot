@@ -52,27 +52,35 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     elif action == "pre_race":
         # Show pre-race content
-        from f1bot.storage.repositories import RaceRepo, ContentRepo
-        race_repo = RaceRepo()
-        race = race_repo.get_next_race()
-        
-        if not race:
-            lang = user.get("lang", "ru") if (user := user_repo.get(update.effective_user.id)) else "ru"
-            await query.edit_message_text(t("menu.pre_race_coming_soon", lang))
-            return
-        
-        content_repo = ContentRepo()
-        user = user_repo.get(update.effective_user.id)
-        lang = user.get("lang", "ru") if user else "ru"
-        
-        content = content_repo.fetch_by_race_type_lang(race["race_id"], "pre_race", lang)
-        if content and content["status"] == "published":
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎯 Открыть Bingo Cards" if lang == "ru" else "🎯 Open Bingo Cards", callback_data="menu:bingo")],
-                [InlineKeyboardButton(t("menu.back", lang), callback_data="menu:main")],
-            ])
-            await query.edit_message_text(content["text"], reply_markup=keyboard)
-        else:
+        try:
+            from f1bot.storage.repositories import RaceRepo, ContentRepo
+            user_repo = UserRepo()
+            user = user_repo.get(update.effective_user.id)
+            lang = user.get("lang", "ru") if user else "ru"
+            
+            race_repo = RaceRepo()
+            race = race_repo.get_next_race()
+            
+            if not race:
+                await query.edit_message_text(t("menu.pre_race_coming_soon", lang))
+                return
+            
+            content_repo = ContentRepo()
+            content = content_repo.fetch_by_race_type_lang(race["race_id"], "pre_race", lang)
+            
+            if content and content["status"] == "published":
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎯 Открыть Bingo Cards" if lang == "ru" else "🎯 Open Bingo Cards", callback_data="menu:bingo")],
+                    [InlineKeyboardButton(t("menu.back", lang), callback_data="menu:main")],
+                ])
+                await query.edit_message_text(content["text"], reply_markup=keyboard)
+            else:
+                await query.edit_message_text(t("menu.pre_race_coming_soon", lang))
+        except Exception as e:
+            logger.error(f"Error showing pre-race content: {e}", exc_info=True)
+            user_repo = UserRepo()
+            user = user_repo.get(update.effective_user.id)
+            lang = user.get("lang", "ru") if user else "ru"
             await query.edit_message_text(t("menu.pre_race_coming_soon", lang))
     elif action == "bingo":
         # Show bingo cards
@@ -80,28 +88,35 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await show_bingo_card(update, context)
     elif action == "post_race":
         # Show post-race content
-        from f1bot.storage.repositories import RaceRepo, ContentRepo
-        race_repo = RaceRepo()
-        race = race_repo.get_last_race()
-        
-        if not race:
+        try:
+            from f1bot.storage.repositories import RaceRepo, ContentRepo
+            user_repo = UserRepo()
             user = user_repo.get(update.effective_user.id)
             lang = user.get("lang", "ru") if user else "ru"
-            await query.edit_message_text(t("menu.post_race_coming_soon", lang))
-            return
-        
-        content_repo = ContentRepo()
-        user = user_repo.get(update.effective_user.id)
-        lang = user.get("lang", "ru") if user else "ru"
-        
-        content = content_repo.fetch_by_race_type_lang(race["race_id"], "post_race", lang)
-        if content and content["status"] == "published":
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Следующая гонка" if lang == "ru" else "📋 Next Race", callback_data="menu:pre_race")],
-                [InlineKeyboardButton(t("menu.back", lang), callback_data="menu:main")],
-            ])
-            await query.edit_message_text(content["text"], reply_markup=keyboard)
-        else:
+            
+            race_repo = RaceRepo()
+            race = race_repo.get_last_race()
+            
+            if not race:
+                await query.edit_message_text(t("menu.post_race_coming_soon", lang))
+                return
+            
+            content_repo = ContentRepo()
+            content = content_repo.fetch_by_race_type_lang(race["race_id"], "post_race", lang)
+            
+            if content and content["status"] == "published":
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 Следующая гонка" if lang == "ru" else "📋 Next Race", callback_data="menu:pre_race")],
+                    [InlineKeyboardButton(t("menu.back", lang), callback_data="menu:main")],
+                ])
+                await query.edit_message_text(content["text"], reply_markup=keyboard)
+            else:
+                await query.edit_message_text(t("menu.post_race_coming_soon", lang))
+        except Exception as e:
+            logger.error(f"Error showing post-race content: {e}", exc_info=True)
+            user_repo = UserRepo()
+            user = user_repo.get(update.effective_user.id)
+            lang = user.get("lang", "ru") if user else "ru"
             await query.edit_message_text(t("menu.post_race_coming_soon", lang))
     elif action == "main":
         await show_main_menu(update, context)
