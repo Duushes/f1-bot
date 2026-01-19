@@ -1,0 +1,309 @@
+---
+title: "F1 Telegram Bot — Implementation Plan (MVP)"
+file: "implementation_plan.mdc"
+alwaysApply: false
+---
+
+# Implementation Plan
+
+**Правило статусов:** у каждого пункта ниже есть статус `TODO | DONE`. Работу всегда начинать **с первого пункта со статусом TODO** и двигаться сверху вниз, не перепрыгивая.
+
+---
+
+## Milestone 1 — Bootstrap проекта, структура, окружение, Docker (MVP foundation)
+
+- TODO: Создать структуру репозитория (monorepo single-service):
+  - `README.md`
+  - `.gitignore`
+  - `.dockerignore`
+  - `Dockerfile`
+  - `.env.example`
+  - `pyproject.toml`
+  - `src/f1bot/__init__.py`
+  - `src/f1bot/main.py`
+  - `src/f1bot/config.py`
+  - `src/f1bot/logging.py`
+  - `src/f1bot/bot/__init__.py`
+  - `src/f1bot/bot/app.py`
+  - `src/f1bot/bot/handlers/__init__.py`
+  - `src/f1bot/bot/handlers/start.py`
+  - `src/f1bot/bot/handlers/language.py`
+  - `src/f1bot/bot/handlers/menu.py`
+  - `src/f1bot/bot/handlers/bingo.py`
+  - `src/f1bot/bot/handlers/admin.py`
+  - `src/f1bot/domain/__init__.py`
+  - `src/f1bot/domain/models.py`
+  - `src/f1bot/services/__init__.py`
+  - `src/f1bot/services/calendar.py`
+  - `src/f1bot/services/news.py`
+  - `src/f1bot/services/llm.py`
+  - `src/f1bot/services/i18n.py`
+  - `src/f1bot/services/bingo.py`
+  - `src/f1bot/storage/__init__.py`
+  - `src/f1bot/storage/db.py`
+  - `src/f1bot/storage/repositories.py`
+  - `src/f1bot/jobs/__init__.py`
+  - `src/f1bot/jobs/scheduler.py`
+  - `src/f1bot/jobs/pre_race.py`
+  - `src/f1bot/jobs/post_race.py`
+  - `migrations/` (опционально для MVP; можно отложить)
+
+- TODO: **ВАЖНО** создать `.gitignore` ДО первого коммита, включив:
+  - `.env`, `.env.*`
+  - `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`
+  - `.venv/`, `venv/`
+  - `*.db`, `*.sqlite`, `*.log`
+  - `.DS_Store`
+
+- TODO: Создать `.env.example` и перечислить переменные окружения:
+  - `TELEGRAM_BOT_TOKEN=`
+  - `OPENAI_API_KEY=`
+  - `ADMIN_TELEGRAM_IDS=` (например: `123,456`)
+  - `ENV=local|prod`
+  - `LOG_LEVEL=INFO`
+  - `DB_URL=sqlite:///data/app.db` (для MVP)
+  - `TIMEZONE=Asia/Makassar`
+  - `LANG_DEFAULT=ru`
+  - `OPENAI_MODEL=` (например: `gpt-4o-mini` / актуальный)
+  - `NEWS_SOURCES=` (опционально)
+  - `F1_CALENDAR_SOURCE=` (опционально)
+
+- TODO: Настроить `pyproject.toml`:
+  - Python `>=3.12`
+  - зависимости:
+    - `python-telegram-bot` (v20+)
+    - `python-dotenv` (**ВАЖНО**)
+    - `httpx`
+    - `pydantic` (или `pydantic-settings`)
+    - `apscheduler` (или встроенный job runner/cron; APScheduler удобнее для MVP)
+    - `sqlalchemy` (опционально; можно sqlite + простые репозитории)
+    - `openai` (официальный SDK)
+  - `project.scripts`:
+    - `f1bot = f1bot.main:main`
+
+- TODO: Реализовать `src/f1bot/config.py`:
+  - загрузка `.env` через `python-dotenv` в local
+  - типизация конфигурации (pydantic settings или dataclass)
+  - парсинг `ADMIN_TELEGRAM_IDS` в set[int]
+  - timezone и дефолтный язык
+
+- TODO: Реализовать базовый логгер `src/f1bot/logging.py`:
+  - единый формат логов
+  - уровень из env
+  - подавление шумных логгеров (по необходимости)
+
+- TODO: Создать `Dockerfile` на базе `python:3.12-slim` с **критическим порядком**:
+  - `COPY pyproject.toml ./`
+  - `COPY src/ ./src/`  # ОБЯЗАТЕЛЬНО перед pip install -e .
+  - `RUN pip install --no-cache-dir -e .`
+  - отдельный `WORKDIR /app`
+  - создание не-root пользователя (по желанию)
+  - запуск через `python -m f1bot.main` или `f1bot`
+
+- TODO: Создать `.dockerignore`:
+  - `.git`, `.venv`, `venv`, `__pycache__`
+  - `.env`, `.env.*`
+  - `*.db`, `*.log`, `.pytest_cache`
+  - `node_modules` (если есть), `dist`, `build`
+
+- TODO: Реализовать `src/f1bot/main.py` и **исправить asyncio для контейнерной среды**:
+  - **НЕ** использовать `asyncio.run()` в `main`
+  - вызывать `application.run_polling()` напрямую
+  - `python-telegram-bot` управляет event loop самостоятельно
+
+- TODO: Сделать первый коммит только после наличия `.gitignore`, `.dockerignore`, `.env.example`, базовой структуры и успешного `docker build`.
+
+---
+
+## Milestone 2 — Бот: базовые команды, язык, меню, хранилище (MVP interactions)
+
+- TODO: Выбрать и зафиксировать подход к хранилищу (MVP):
+  - SQLite файл + простые репозитории (рекомендуется)
+  - таблицы:
+    - `users (telegram_id, lang, created_at, updated_at)`
+    - `races (race_id, name, start_time_utc, status, meta_json)`
+    - `contents (race_id, type, lang, status, text, created_at, updated_at)`
+    - `bingo_cards (race_id, lang, cells_json, created_at)`
+    - `bingo_user_state (race_id, telegram_id, states_json, created_at, updated_at)`
+  - статусы контента: `draft | pending_admin | approved | published`
+
+- TODO: Реализовать `src/f1bot/storage/db.py`:
+  - инициализация sqlite (создание файла/папки `data/`)
+  - создание таблиц при старте (для MVP без миграций)
+  - безопасные операции (context manager)
+
+- TODO: Реализовать `src/f1bot/storage/repositories.py`:
+  - `UserRepo`: get/create, update_lang
+  - `RaceRepo`: upsert, get_next_race, get_last_race
+  - `ContentRepo`: save_draft, mark_pending, approve, publish, fetch_by_race_type_lang
+  - `BingoRepo`: save_template, get_template, upsert_user_state, get_user_state
+
+- TODO: Реализовать `src/f1bot/services/i18n.py`:
+  - словарь ключей RU/EN для системных UI-текстов (кнопки, ошибки)
+  - функция `t(key, lang, **kwargs)`
+
+- TODO: Реализовать `src/f1bot/bot/app.py`:
+  - сборка `Application` из python-telegram-bot
+  - регистрация handlers
+  - регистрация ошибок/логирования
+
+- TODO: Реализовать handlers:
+  - `start.py`:
+    - /start → выбор языка (RU/EN) если не задан; иначе меню
+  - `language.py`:
+    - callback на выбор языка → сохранение → меню
+  - `menu.py`:
+    - кнопки:
+      - “F1 in 60 Seconds”
+      - “Bingo Cards”
+      - “Race Result in 60 Seconds”
+      - “Language”
+    - маршрутизация в сценарии
+
+- TODO: Реализовать `admin.py` (минимально):
+  - проверка `telegram_id in ADMIN_TELEGRAM_IDS`
+  - команды/кнопки:
+    - “Approve Pre-Race”
+    - “Approve Post-Race”
+    - “Approve Bingo Fill” (для полу-авто/ручной покраски)
+  - список pending сообщений по гонке/языку
+  - действия: Approve / Edit (простая: “ответь текстом и перезапиши”) / Cancel
+
+- TODO: Сделать smoke-test локально:
+  - запуск из venv
+  - /start → выбор языка → меню
+  - проверка сохранения языка в sqlite
+
+---
+
+## Milestone 3 — Данные (календарь/новости), LLM-контент, авто-публикации с админ-approve (MVP value)
+
+- TODO: Реализовать `src/f1bot/services/calendar.py`:
+  - источник календаря:
+    - MVP-опция A: фиксированный JSON/ICS в репозитории (быстро, стабильно)
+    - MVP-опция B: загрузка из публичного источника (если есть надёжный URL)
+  - функция `get_next_race(now, tz)` → объект гонки
+  - функция `is_race_weekend(now)` (опционально)
+  - хранение `start_time_utc`, `race_name`, `track` (если доступно)
+
+- TODO: Реализовать `src/f1bot/services/news.py` (MVP “lite”):
+  - собрать 5–10 ссылок/заголовков из:
+    - официальных каналов
+    - trusted F1 media
+  - MVP компромисс: не парсить весь веб; достаточно “bullet context” для LLM:
+    - `[{title, source, published_at, url}]`
+  - ограничить длину контекста
+
+- TODO: Реализовать `src/f1bot/services/llm.py`:
+  - единый клиент OpenAI
+  - функции:
+    - `generate_pre_race(race, news_context, lang) -> text (5–7 bullets)`
+    - `generate_post_race(race, news_context, lang) -> text (5–7 bullets)`
+    - `generate_bingo(race, context, lang) -> 16 cells`
+  - guardrails:
+    - строгий формат (список буллетов)
+    - ограничение длины
+    - запрет на выдумывание фактов без указания “вероятно/по сообщениям”
+    - упор на проверяемые события для бинго (часть фиксированная)
+
+- TODO: Реализовать `src/f1bot/services/bingo.py`:
+  - генерация 16 клеток:
+    - 10–12 “строго проверяемых” (фиксированный список + вариации)
+    - 4–6 “мемных/контекстных” (LLM)
+  - модель клетки:
+    - `id`, `title`, `type=hard|meme`, `verification_hint`
+  - сериализация в JSON для хранения
+
+- TODO: Реализовать `bingo.py` handler:
+  - отображение 4×4 как inline keyboard (по 16 кнопок)
+  - клики по клеткам:
+    - переключение состояния пользователем: ❌ ↔ ✅ (MVP: пользователь сам, без авто)
+  - “Finish” кнопка:
+    - подсчёт ✅ и вывод “Закрашено X из 16”
+  - админ-режим:
+    - команда “Admin Paint” → выбрать гонку → выбрать пользователя → массово выставить (опционально)
+    - MVP упрощение: админ подтверждает “итоговую заливку” одной кнопкой (замораживает состояние)
+
+- TODO: Реализовать jobs / scheduler:
+  - `src/f1bot/jobs/scheduler.py`:
+    - запуск APScheduler в рамках процесса (или Railway cron + endpoint/command)
+  - `pre_race.py`:
+    - каждый N минут проверять ближайшую гонку
+    - если сейчас `start_time - 2h` и нет pending контента:
+      - собрать календарь + новости
+      - сгенерировать RU + EN
+      - пометить как `pending_admin`
+      - отправить админу карточку превью + кнопки Approve/Edit/Cancel
+  - `post_race.py`:
+    - триггер после гонки (MVP: ручной запуск админом “Generate Post-Race” или по расписанию + окно)
+    - сгенерировать RU + EN, отправить админу на approve
+
+- TODO: Реализовать отправку пользователям:
+  - при approve контента админом:
+    - публикация в канал/чат (если bot админ канала)
+    - либо рассылка подписчикам (в личку) — MVP: рассылка всем user_ids
+  - добавить кнопку CTA:
+    - в Pre-Race: “Открыть Bingo Cards”
+    - в Post-Race: “Узнать про следующую гонку” → генерирует/показывает Pre-Race для next race (если уже готово — показываем из базы)
+
+- TODO: End-to-end тест сценариев:
+  - T-2h: pending → approve → публикация
+  - Bingo: открыть → отметить → finish
+  - Post-race: pending → approve → публикация → CTA next race
+
+---
+
+## Milestone 4 — Деплой на Railway, наблюдаемость, стабильность (MVP shipping)
+
+- TODO: Подготовить Railway deployment:
+  - переменные окружения в Railway (без .env)
+  - команда запуска
+  - volume/диск для sqlite (если требуется persist)
+  - healthcheck (опционально)
+
+- TODO: Проверить Docker build/run локально:
+  - `docker build`
+  - `docker run` с env
+  - бот отвечает на /start
+
+- TODO: Добавить базовую наблюдаемость:
+  - логирование key events: start, language set, menu clicks, generation, approve/publish
+  - обработчик ошибок PTB (лог + user-friendly message)
+
+- TODO: Документация в README:
+  - локальный запуск
+  - запуск в docker
+  - деплой на Railway
+  - как получить Telegram bot token
+  - как включить админов
+  - как настроить канал (если используется)
+
+- TODO: Финальная проверка MVP:
+  - RU/EN работают
+  - один полный цикл pre-race → bingo → post-race
+
+---
+
+# Acceptance Checklist
+
+- [ ] Репозиторий содержит корректный `.gitignore` (включая `.env*`) и он создан до первого коммита
+- [ ] В проект добавлен `python-dotenv` и локальная загрузка переменных окружения работает
+- [ ] Есть `.env.example` со всеми нужными переменными
+- [ ] Dockerfile на `python:3.12-slim` реализован с критическим порядком для editable install:
+  - [ ] `COPY pyproject.toml ./`
+  - [ ] `COPY src/ ./src/`
+  - [ ] `RUN pip install --no-cache-dir -e .`
+- [ ] Есть `.dockerignore`, оптимизирующий контекст сборки
+- [ ] В `main` нет `asyncio.run()`; `python-telegram-bot` запускается через `application.run_polling()` (или webhook) напрямую
+- [ ] Бот поддерживает RU/EN и сохраняет выбор языка пользователя
+- [ ] Реализован сценарий **F1 in 60 Seconds** с авто-генерацией и админ-approve за 2 часа до старта
+- [ ] Реализован сценарий **Bingo Cards** 4×4:
+  - [ ] 16 клеток
+  - [ ] ручная отметка пользователем ✅/❌
+  - [ ] финальный экран с подсчётом ✅
+  - [ ] админ может подтвердить/зафиксировать итог (минимально)
+- [ ] Реализован сценарий **Race Result in 60 Seconds** с админ-approve и CTA на следующую гонку
+- [ ] Бот опирается на календарь гонок и контекст новостей/официальных источников (MVP-lite допустим)
+- [ ] Проект деплоится на Railway через GitHub и стабильно запускается в контейнере
+
+> **@Cursor**: После завершения задачи поменяй её статус на DONE и добавь краткий маркер «// done by Cursor» с описанием, что именно сделано.
