@@ -146,12 +146,72 @@ OPENAI_MODEL=gpt-4o-mini
 
 ## Деплой на Railway
 
-1. Подключите GitHub репозиторий к Railway
-2. Добавьте все переменные окружения из `.env.example`
-3. Railway автоматически определит Dockerfile и соберёт проект
-4. Бот запустится автоматически после деплоя
+### Шаг 1: Создание проекта на Railway
 
-**Важно**: Убедитесь, что переменная `ENV=prod` установлена в Railway для продакшена.
+1. Перейдите на [railway.app](https://railway.app) и войдите через GitHub
+2. Нажмите **"New Project"** (или кнопку **"+"**)
+3. Выберите **"Deploy from GitHub repo"**
+4. Найдите и выберите репозиторий `Duushes/f1-bot`
+5. Railway автоматически определит Dockerfile и начнёт сборку
+
+### Шаг 2: Настройка переменных окружения
+
+1. В проекте Railway откройте вкладку **"Variables"** (или нажмите на сервис → **Variables**)
+2. Добавьте все необходимые переменные окружения:
+
+```
+TELEGRAM_BOT_TOKEN=ваш_telegram_bot_token
+OPENAI_API_KEY=ваш_openai_api_key
+OPENAI_MODEL=gpt-5.2
+ADMIN_TELEGRAM_IDS=123456789,987654321
+ENV=prod
+LOG_LEVEL=INFO
+DB_URL=sqlite:///data/app.db
+TIMEZONE=Asia/Makassar
+LANG_DEFAULT=ru
+```
+
+**Важно**: 
+- Установите `ENV=prod` для продакшена (это отключит загрузку .env файла)
+- `ADMIN_TELEGRAM_IDS` - укажите ваши Telegram ID через запятую (без пробелов)
+- Railway автоматически создаст volume для базы данных
+
+### Шаг 3: Настройка Persistent Storage (для базы данных)
+
+1. В проекте Railway откройте вкладку **"Data"** или нажмите **"+ New"** → **"Volume"**
+2. Создайте Volume с путём монтирования `/app/data`
+3. Это сохранит базу данных SQLite между перезапусками контейнера
+
+**Альтернатива**: Railway может автоматически создать volume, если путь `/app/data` используется в коде.
+
+### Шаг 4: Деплой и мониторинг
+
+1. Railway автоматически начнёт деплой после подключения репозитория
+2. Следите за логами в разделе **"Deployments"** или **"Logs"**
+3. После успешного деплоя бот будет работать 24/7
+4. Проверьте логи на наличие ошибок
+
+### Автоматический деплой
+
+Railway автоматически деплоит при каждом push в ветку `main`:
+```bash
+git push origin main
+```
+
+### Troubleshooting
+
+Если бот не запускается:
+1. **Проверьте логи** в Railway (вкладка "Logs")
+2. **Убедитесь**, что все переменные окружения установлены и корректны
+3. **Проверьте**, что `TELEGRAM_BOT_TOKEN` и `OPENAI_API_KEY` валидны
+4. **Убедитесь**, что `ENV=prod` установлена
+5. **Проверьте**, что Volume создан и смонтирован правильно
+
+### Полезные ссылки Railway
+
+- [Railway Dashboard](https://railway.app/dashboard)
+- [Railway Docs](https://docs.railway.app)
+- [Railway Discord](https://discord.gg/railway)
 
 ## Разработка
 
