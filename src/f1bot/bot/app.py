@@ -24,11 +24,18 @@ async def error_handler(update: object, context: Exception) -> None:
             pass
 
 
+async def post_init(application: Application) -> None:
+    """Called after application is initialized and event loop is running."""
+    from f1bot.jobs.scheduler import start_scheduler
+    await start_scheduler()
+
+
 def create_application() -> Application:
     """Create and configure the Telegram application."""
     application = (
         ApplicationBuilder()
         .token(settings.telegram_bot_token)
+        .post_init(post_init)
         .build()
     )
 

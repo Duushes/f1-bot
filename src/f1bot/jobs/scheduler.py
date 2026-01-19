@@ -11,7 +11,7 @@ scheduler = AsyncIOScheduler()
 
 
 def setup_scheduler() -> None:
-    """Setup and start scheduler."""
+    """Setup scheduler jobs (don't start yet)."""
     from f1bot.jobs.pre_race import pre_race_job
     from f1bot.jobs.post_race import post_race_job
     
@@ -31,11 +31,18 @@ def setup_scheduler() -> None:
         replace_existing=True,
     )
     
-    scheduler.start()
-    logger.info("Scheduler started")
+    logger.info("Scheduler jobs configured")
+
+
+async def start_scheduler() -> None:
+    """Start scheduler (call this after event loop is running)."""
+    if not scheduler.running:
+        scheduler.start()
+        logger.info("Scheduler started")
 
 
 def shutdown_scheduler() -> None:
     """Shutdown scheduler."""
-    scheduler.shutdown()
-    logger.info("Scheduler shut down")
+    if scheduler.running:
+        scheduler.shutdown()
+        logger.info("Scheduler shut down")

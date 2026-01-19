@@ -5,7 +5,7 @@ import asyncio
 from f1bot.bot.app import create_application
 from f1bot.logging import setup_logging, get_logger
 from f1bot.storage.db import init_db
-from f1bot.jobs.scheduler import setup_scheduler, shutdown_scheduler
+from f1bot.jobs.scheduler import setup_scheduler, start_scheduler, shutdown_scheduler
 
 logger = get_logger(__name__)
 
@@ -18,10 +18,10 @@ def main() -> None:
     # Initialize database
     init_db()
 
-    # Setup scheduler
+    # Setup scheduler (configure jobs, but don't start yet)
     setup_scheduler()
 
-    # Create application
+    # Create application (scheduler will start via post_init callback)
     application = create_application()
 
     try:
