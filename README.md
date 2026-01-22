@@ -141,8 +141,24 @@ LOG_LEVEL=INFO
 DB_URL=sqlite:///data/app.db
 TIMEZONE=Asia/Makassar
 LANG_DEFAULT=ru
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5.2
+
+# Опционально: источники новостей (через запятую)
+NEWS_SOURCES=https://api.example.com/news,https://rss.example.com/f1.xml
+
+# Опционально: источник календаря F1 (JSON или ICS)
+F1_CALENDAR_SOURCE=https://api.example.com/f1/calendar.json
 ```
+
+### Описание переменных
+
+- **NEWS_SOURCES**: Список URL источников новостей через запятую. Поддерживаются:
+  - JSON API (массив объектов с полями `title`, `url`, `published_at`)
+  - RSS/XML фиды (базовый парсинг)
+  
+- **F1_CALENDAR_SOURCE**: URL календаря гонок F1. Поддерживаются:
+  - JSON формат (массив гонок с полями `id`, `name`, `start_time`, `track`)
+  - ICS формат (iCalendar)
 
 ## Деплой на Railway
 
