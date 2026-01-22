@@ -54,6 +54,8 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Show pre-race content
         try:
             from f1bot.storage.repositories import RaceRepo, ContentRepo
+            from f1bot.services.calendar import get_next_race as get_calendar_race
+            
             user_repo = UserRepo()
             user = user_repo.get(update.effective_user.id)
             lang = user.get("lang", "ru") if user else "ru"
@@ -61,8 +63,33 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             race_repo = RaceRepo()
             race = race_repo.get_next_race()
             
+            # If not in database, try to fetch from calendar source
             if not race:
-                await query.edit_message_text(t("menu.pre_race_coming_soon", lang))
+                logger.info("No race in database, trying to fetch from calendar")
+                try:
+                    calendar_race = get_calendar_race()
+                    if calendar_race:
+                        # Save to database
+                        race_repo.upsert(
+                            race_id=calendar_race["race_id"],
+                            name=calendar_race["name"],
+                            start_time_utc=calendar_race["start_time_utc"],
+                            status=calendar_race["status"],
+                            meta_json=calendar_race.get("meta_json"),
+                        )
+                        race = calendar_race
+                        logger.info(f"Fetched race from calendar: {race['name']}")
+                except Exception as e:
+                    logger.error(f"Error fetching from calendar: {e}")
+            
+            if not race:
+                logger.info("No upcoming race found")
+                text = t("menu.pre_race_coming_soon", lang)
+                if lang == "ru":
+                    text += "\n\n💡 Совет: Убедитесь, что F1_CALENDAR_SOURCE настроен в переменных окружения."
+                else:
+                    text += "\n\n💡 Tip: Make sure F1_CALENDAR_SOURCE is configured in environment variables."
+                await query.edit_message_text(text)
                 return
             
             content_repo = ContentRepo()
@@ -75,7 +102,26 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 ])
                 await query.edit_message_text(content["text"], reply_markup=keyboard)
             else:
-                await query.edit_message_text(t("menu.pre_race_coming_soon", lang))
+                # Show race info even if content is not ready
+                race_name = race.get("name", "Unknown Race")
+                meta = race.get("meta_json", {})
+                track = meta.get("track", "") if isinstance(meta, dict) else ""
+                
+                if lang == "ru":
+                    text = f"🏎️ Гонка: {race_name}\n"
+                    if track:
+                        text += f"📍 Трасса: {track}\n"
+                    text += "\n📋 Превью гонки будет доступно за 2 часа до старта."
+                else:
+                    text = f"🏎️ Race: {race_name}\n"
+                    if track:
+                        text += f"📍 Track: {track}\n"
+                    text += "\n📋 Race preview will be available 2 hours before start."
+                
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(t("menu.back", lang), callback_data="menu:main")],
+                ])
+                await query.edit_message_text(text, reply_markup=keyboard)
         except Exception as e:
             logger.error(f"Error showing pre-race content: {e}", exc_info=True)
             user_repo = UserRepo()
