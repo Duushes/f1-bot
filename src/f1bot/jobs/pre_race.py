@@ -18,9 +18,25 @@ async def pre_race_job() -> None:
     """Generate pre-race content 2 hours before race start."""
     logger.info("Pre-race job triggered")
     
-    # Get next race
+    # Get next race from database first
     race_repo = RaceRepo()
     race = race_repo.get_next_race()
+    
+    # If not in database, try to fetch from calendar source
+    if not race:
+        logger.info("No race in database, trying to fetch from calendar source")
+        calendar_race = get_next_race()
+        if calendar_race:
+            # Save to database
+            race_repo.upsert(
+                race_id=calendar_race["race_id"],
+                name=calendar_race["name"],
+                start_time_utc=calendar_race["start_time_utc"],
+                status=calendar_race["status"],
+                meta_json=calendar_race.get("meta_json"),
+            )
+            race = calendar_race
+            logger.info(f"Fetched race from calendar: {race['name']}")
     
     if not race:
         logger.info("No upcoming race found")
